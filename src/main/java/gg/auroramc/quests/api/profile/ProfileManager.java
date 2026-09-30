@@ -12,7 +12,11 @@ public class ProfileManager {
     private final Map<UUID, Profile> profileMap = new ConcurrentHashMap<>();
 
     public void createProfile(AuroraUser user) {
-        profileMap.computeIfAbsent(user.getUniqueId(), uuid -> new Profile(user));
+        profileMap.compute(user.getUniqueId(), (uuid, existing) -> {
+            if (existing != null && existing.getUser() == user && existing.getPlayer() == user.getPlayer()) return existing;
+            if (existing != null) existing.destroy();
+            return new Profile(user);
+        });
     }
 
     public Profile getProfile(Player player) {
