@@ -12,7 +12,7 @@ public class ProfileManager {
     private final Map<UUID, Profile> profileMap = new ConcurrentHashMap<>();
 
     public void createProfile(AuroraUser user) {
-        profileMap.put(user.getUniqueId(), new Profile(user));
+        profileMap.computeIfAbsent(user.getUniqueId(), uuid -> new Profile(user));
     }
 
     public Profile getProfile(Player player) {
@@ -28,5 +28,10 @@ public class ProfileManager {
 
     public Collection<Profile> getProfiles() {
         return profileMap.values();
+    }
+
+    public void clear() {
+        profileMap.values().forEach(Profile::destroy);
+        profileMap.clear();
     }
 }

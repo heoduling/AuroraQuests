@@ -20,6 +20,7 @@ import gg.auroramc.quests.api.questpool.PoolManager;
 import gg.auroramc.quests.command.CommandManager;
 import gg.auroramc.quests.config.ConfigManager;
 import gg.auroramc.quests.hooks.HookManager;
+import gg.auroramc.quests.hooks.luckperms.LuckPermsHook;
 import gg.auroramc.quests.menu.PoolMenu;
 import gg.auroramc.quests.objective.*;
 import gg.auroramc.quests.parser.PoolParser;
@@ -35,16 +36,24 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
+import org.quartz.impl.SchedulerRepository;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 import java.util.concurrent.TimeUnit;
 
 @Getter
 public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
-    private boolean loaded = false;
+    private volatile boolean loaded = false;
+    private volatile boolean stopping;
+    private Metrics metrics;
+    private QuestPlaceholderHandler placeholderHandler;
+    private BiConsumer<Player, String> questActionHandler;
 
     @Getter
     private static AuroraQuests instance;
@@ -102,7 +111,8 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
         }
 
         AuroraAPI.getUserManager().registerUserDataHolder(QuestData.class);
-        AuroraAPI.registerPlaceholderHandler(new QuestPlaceholderHandler());
+        placeholderHandler = new QuestPlaceholderHandler();
+        AuroraAPI.registerPlaceholderHandler(placeholderHandler);
         Bukkit.getPluginManager().registerEvents(this, this);
 
         commandManager = new CommandManager(this);
@@ -125,7 +135,8 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
             reloadUnlockTask();
         });
 
-        CommandDispatcher.registerActionHandler("quest-pool", (player, input) -> {
+        questActionHandler = (player, input) -> {
+            if (stopping) return;
             var split = input.split("---");
             var poolId = split[0].trim();
             var profile = profileManager.getProfile(player);
@@ -137,9 +148,11 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
             } else {
                 new PoolMenu(profile, pool).open();
             }
-        });
+        };
+        CommandDispatcher.registerActionHandler("quest-pool", questActionHandler);
 
-        new Metrics(this, 23779).addCustomChart(new AdvancedPie("objective_type_distribution", () -> {
+        metrics = new Metrics(this, 23779);
+        metrics.addCustomChart(new AdvancedPie("objective_type_distribution", () -> {
             var data = new HashMap<String, Integer>();
 
             for (var pool : poolManager.getPools()) {
@@ -179,17 +192,41 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        stopping = true;
+        loaded = false;
+        closeLuckPermsHook();
+        if (metrics != null) { metrics.shutdown(); metrics = null; }
+        if (placeholderHandler != null) AuroraAPI.removePlaceholderHandler(placeholderHandler);
+        if (questActionHandler != null) CommandDispatcher.unregisterActionHandler("quest-pool", questActionHandler);
+        profileManager.clear();
         commandManager.unregisterCommands();
 
         try {
             l.info("Shutting down scheduler...");
-            StdSchedulerFactory.getDefaultScheduler().shutdown(true);
+            var scheduler = SchedulerRepository.getInstance().lookup("DefaultQuartzScheduler");
+            if (scheduler != null) scheduler.shutdown(true);
         } catch (SchedulerException e) {
             l.severe("Failed to shutdown scheduler: " + e.getMessage());
         }
 
         if (unlockTask != null && !unlockTask.isCancelled()) {
             unlockTask.cancel();
+        }
+    }
+
+    /** Stop accepting new profile work before the coordinator drains player-owned state. */
+    public void beginHotUnload() {
+        stopping = true;
+        loaded = false;
+        closeLuckPermsHook();
+        if (unlockTask != null) unlockTask.cancel();
+        if (metrics != null) { metrics.shutdown(); metrics = null; }
+    }
+
+    private void closeLuckPermsHook() {
+        if (Bukkit.getPluginManager().isPluginEnabled("LuckPerms")) {
+            var hook = HookManager.getHook(LuckPermsHook.class);
+            if (hook != null) hook.close();
         }
     }
 
@@ -244,6 +281,7 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
     }
 
     private void reloadUnlockTask() {
+        if (stopping) return;
         var cf = configManager.getConfig().getUnlockTask();
 
         if (!cf.getEnabled()) {
@@ -255,6 +293,7 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
         }
 
         unlockTask = Bukkit.getAsyncScheduler().runAtFixedRate(this, (task) -> {
+            if (stopping) return;
             profileManager.getProfiles().forEach(profile -> {
                 for (var pool : profile.getQuestPools()) {
                     pool.unlock(false);
@@ -265,15 +304,16 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
         }, cf.getInterval(), cf.getInterval(), TimeUnit.SECONDS);
     }
 
-    private final Set<Player> toLoad = new HashSet<>();
+    private final Set<UUID> toLoad = ConcurrentHashMap.newKeySet();
 
     @EventHandler
     public void onUserLoaded(AuroraUserLoadedEvent event) {
+        if (stopping) return;
         if (event.getUser().getPlayer() != null) {
             if (loaded) {
-                profileManager.createProfile(event.getUser());
+                loadProfile(event.getUser().getUniqueId());
             } else {
-                toLoad.add(event.getUser().getPlayer());
+                toLoad.add(event.getUser().getUniqueId());
             }
         }
     }
@@ -281,12 +321,14 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         profileManager.destroyProfile(event.getPlayer().getUniqueId());
-        toLoad.remove(event.getPlayer());
+        toLoad.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
     public void onQuestComplete(QuestCompletedEvent event) {
+        if (stopping) return;
         var profile = profileManager.getProfile(event.getPlayer());
+        if (profile == null) return;
         for (var pool : profile.getQuestPools()) {
             pool.unlock(false);
             pool.rollIfNecessary(true);
@@ -295,10 +337,21 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
     }
 
     private void loadPlayers() {
-        for (var player : toLoad) {
-            var user = AuroraUser.get(player.getUniqueId());
-            profileManager.createProfile(user);
-        }
+        for (var uuid : toLoad) loadProfile(uuid);
         toLoad.clear();
+        for (var player : Bukkit.getOnlinePlayers()) loadProfile(player.getUniqueId());
+    }
+
+    private void loadProfile(UUID uuid) {
+        var player = Bukkit.getPlayer(uuid);
+        if (player == null || stopping) return;
+        player.getScheduler().run(this, task -> {
+            if (stopping || !loaded || !player.isOnline()) return;
+            var user = AuroraUser.get(uuid);
+            if (user.isLoaded()) {
+                user.initMissingData(QuestData.class);
+                profileManager.createProfile(user);
+            }
+        }, null);
     }
 }

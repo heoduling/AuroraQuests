@@ -129,6 +129,7 @@ public abstract class Objective extends EventBus {
     }
 
     public void progress(double progress, ObjectiveMeta meta) {
+        if (AuroraQuests.getInstance().isStopping()) return;
         if (isCompleted()) return;
 
         if (passesFilters(meta)) {

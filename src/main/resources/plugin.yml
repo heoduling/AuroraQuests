@@ -1,4 +1,5 @@
 name: AuroraQuests
+aurora-hotswap-protocol: 1
 version: '${version}'
 main: gg.auroramc.quests.AuroraQuests
 api-version: '26.2'
