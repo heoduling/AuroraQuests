@@ -37,7 +37,8 @@ public class BlockLootObjective extends TypedObjective {
     }
 
     public void onBlockDrop(BlockDropItemEvent e) {
-        if (AuroraAPI.getRegionManager().isPlacedBlock(e.getBlock())) return;
+        var regionManager = AuroraAPI.getRegionManager();
+        if (regionManager == null || regionManager.isPlacedBlock(e.getBlock())) return;
         if (e.getPlayer() != data.profile().getPlayer()) return;
 
         if (blacklist.contains(e.getBlockState().getType())) return;

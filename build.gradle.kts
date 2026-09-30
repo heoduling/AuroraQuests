@@ -78,7 +78,14 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.31-alpha")
-    compileOnly("gg.auroramc:Aurora:2.6.0-SNAPSHOT")
+    val auroraJar = providers.gradleProperty("auroraJar")
+    if (auroraJar.isPresent) {
+        compileOnly(files(auroraJar.get()))
+        testImplementation(files(auroraJar.get()))
+    } else {
+        compileOnly("gg.auroramc:Aurora:2.6.0-SNAPSHOT")
+        testImplementation("gg.auroramc:Aurora:2.6.0-SNAPSHOT")
+    }
     compileOnly("gg.auroramc:AuroraLevels:1.6.2")
     compileOnly("net.luckperms:api:5.4")
     compileOnly("dev.aurelium:auraskills-api-bukkit:2.2.0")
@@ -104,7 +111,7 @@ dependencies {
     compileOnly("lol.pyr:znpcsplus-api:2.1.0-SNAPSHOT")
     compileOnly("de.oliver:FancyNpcs:2.6.0")
     compileOnly("ink.ptms.adyeshach:all:2.0.0-snapshot-1")
-    compileOnly("com.nexomc:nexo:1.8.0")
+    compileOnly("com.nexomc:nexo:1.8.0") { isTransitive = false }
     compileOnly("su.nightexpress.nightcore:main:2.16.2")
     compileOnly("su.nightexpress.excellentshop:Core:5.1.2") {
         exclude(group = "su.nightexpress.nightcore", module = "main")

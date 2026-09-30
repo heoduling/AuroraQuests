@@ -35,7 +35,9 @@ public class NexoHook implements Hook, Listener {
     }
 
     private boolean invalid(Player player, Block block) {
-        return player == null || block == null || AuroraAPI.getRegionManager().isPlacedBlock(block);
+        if (player == null || block == null) return true;
+        var regionManager = AuroraAPI.getRegionManager();
+        return regionManager == null || regionManager.isPlacedBlock(block);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

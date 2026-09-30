@@ -75,7 +75,8 @@ public class FarmingObjective extends TypedObjective {
             return;
         }
 
-        if (AuroraAPI.getRegionManager().isPlacedBlock(event.getBlock())) return;
+        var regionManager = AuroraAPI.getRegionManager();
+        if (regionManager == null || regionManager.isPlacedBlock(event.getBlock())) return;
 
         if (specialCrops.contains(event.getBlockState().getType())) {
             for (var drop : event.getItems()) {

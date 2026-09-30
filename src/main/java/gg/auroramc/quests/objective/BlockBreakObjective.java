@@ -29,7 +29,8 @@ public class BlockBreakObjective extends TypedObjective {
     }
 
     public void onBlockBreak(PlayerBreakCustomBlockEvent event) {
-        if (AuroraAPI.getRegionManager().isPlacedBlock(event.getBlock())) return;
+        var regionManager = AuroraAPI.getRegionManager();
+        if (regionManager == null || regionManager.isPlacedBlock(event.getBlock())) return;
         progress(1, meta(event.getBlock().getLocation(), event.getType()));
     }
 }
