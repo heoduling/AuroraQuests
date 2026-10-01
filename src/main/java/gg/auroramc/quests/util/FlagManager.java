@@ -9,7 +9,7 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 public class FlagManager {
-    public static final StateFlag QUESTS_PROGRESS
+    public static StateFlag QUESTS_PROGRESS
             = new StateFlag("aurora-quests-progress", true);
 
     public static void registerFlags() {
@@ -18,6 +18,12 @@ public class FlagManager {
     }
 
     private static void registerXpGainFlag(FlagRegistry registry) {
+        var existing = registry.get(QUESTS_PROGRESS.getName());
+        if (existing instanceof StateFlag state) {
+            QUESTS_PROGRESS = state;
+            return;
+        }
+        if (existing != null) throw new IllegalStateException("aurora-quests-progress is registered with an incompatible flag type");
         try {
             registry.register(QUESTS_PROGRESS);
             AuroraQuests.logger().info("Registered WorldGuard flag aurora-quests-progress");

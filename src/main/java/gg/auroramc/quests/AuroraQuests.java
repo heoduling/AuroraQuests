@@ -100,10 +100,16 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
         }
 
         HookManager.loadHooks(this);
+        if (Bukkit.getPluginManager().getPlugin("WorldGuard") != null
+                && !HookManager.isEnabled(gg.auroramc.quests.hooks.worldguard.WorldGuardHook.class)) {
+            throw new IllegalStateException("WorldGuard integration could not be restored; quest region restrictions must remain active");
+        }
     }
 
     @Override
     public void onEnable() {
+        stopping = false;
+        Aurora.getInstance().getHotReload().releaseInitializationTrace(this);
         localizationProvider = new LocalizationProvider(Aurora.getLanguageProvider(), configManager.getConfig().getPerPlayerLocale());
 
         for (var msg : configManager.getMessageConfigs().entrySet()) {
@@ -116,7 +122,7 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(this, this);
 
         commandManager = new CommandManager(this);
-        commandManager.reload();
+        Aurora.getInstance().getHotReload().changeCommands(commandManager::reload);
 
         HookManager.enableHooks(this);
 
@@ -212,6 +218,11 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
         if (unlockTask != null && !unlockTask.isCancelled()) {
             unlockTask.cancel();
         }
+    }
+
+    /** Readiness is checked before reporting a native reload complete. */
+    public boolean isHotReloadReady() {
+        return loaded && !stopping && Bukkit.getOnlinePlayers().stream().allMatch(player -> profileManager.getProfile(player) != null);
     }
 
     /** Stop accepting new profile work before the coordinator drains player-owned state. */
