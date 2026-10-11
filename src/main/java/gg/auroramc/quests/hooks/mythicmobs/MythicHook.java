@@ -6,8 +6,13 @@ import gg.auroramc.quests.hooks.Hook;
 import gg.auroramc.quests.hooks.mythicmobs.reward.MythicStatCorrector;
 import gg.auroramc.quests.hooks.mythicmobs.reward.MythicStatReward;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 
 public class MythicHook implements Hook {
+    public void clearRewards(Player player) {
+        MythicStatCorrector.clearRewards(player);
+    }
+
     @Override
     public void hook(AuroraQuests plugin) {
         Bukkit.getPluginManager().registerEvents(new MythicMobListener(), plugin);
@@ -15,8 +20,10 @@ public class MythicHook implements Hook {
         plugin.getPoolManager().getRewardFactory()
                 .registerRewardType(NamespacedId.fromDefault("mythic_stat"), MythicStatReward.class);
 
+        var corrector = new MythicStatCorrector();
+        Bukkit.getPluginManager().registerEvents(corrector, plugin);
         plugin.getPoolManager().getRewardAutoCorrector()
-                .registerCorrector(NamespacedId.fromDefault("mythic_stat"), new MythicStatCorrector());
+                .registerCorrector(NamespacedId.fromDefault("mythic_stat"), corrector);
 
         AuroraQuests.logger().info("Hooked into MythicMobs for KILL_MOB, ENTITY_LOOT and KILL_LEVELLED_MOB objectives.");
     }

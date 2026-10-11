@@ -6,6 +6,8 @@ import gg.auroramc.aurora.api.user.AuroraUser;
 import gg.auroramc.quests.AuroraQuests;
 import gg.auroramc.quests.api.data.QuestData;
 import gg.auroramc.quests.api.questpool.QuestPool;
+import gg.auroramc.quests.hooks.HookManager;
+import gg.auroramc.quests.hooks.mythicmobs.MythicHook;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -62,8 +64,12 @@ public class Profile {
             getData().purgeInvalidData(AuroraQuests.getInstance().getPoolManager().getPools());
         }
 
-        Bukkit.getAsyncScheduler().runDelayed(AuroraQuests.getInstance(),
-                (t) -> AuroraQuests.getInstance().getPoolManager().getRewardAutoCorrector().correctRewards(player), 50, TimeUnit.MILLISECONDS);
+        var plugin = AuroraQuests.getInstance();
+        Bukkit.getAsyncScheduler().runDelayed(plugin, t -> {
+            if (!plugin.isEnabled() || plugin.isStopping()
+                    || plugin.getProfileManager().getProfile(player) != this) return;
+            plugin.getPoolManager().getRewardAutoCorrector().correctRewards(player);
+        }, 50, TimeUnit.MILLISECONDS);
     }
 
     public Collection<QuestPool> getQuestPools() {
@@ -87,6 +93,8 @@ public class Profile {
     }
 
     public void destroy() {
+        var mythic = HookManager.getHook(MythicHook.class);
+        if (mythic != null) mythic.clearRewards(player);
         for (var pool : data.values()) {
             pool.destroy();
         }
