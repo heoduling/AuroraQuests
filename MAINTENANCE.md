@@ -1,3 +1,19 @@
+# Midnight reroll and manual hot update: 2.5.0-6
+
+Based on maintained 2.5.0-5 (d8df5a1275f30bd562ab09933515a7583d980d5e), using Aurora 2.6.0-13. QuestRollJob previously retained profile snapshots across quit cleanup and unconditionally dereferenced a missing player pool. Batch profile operations now route to each player's EntityScheduler and revalidate online/current-profile identity; stale pool definitions and absent player pools are skipped. Pool definitions publish atomically, and config reload cancels the previous periodic unlock task.
+
+The only Quartz job reads JobExecutionContext directly and has no injected setters. SimpleJobFactory replaces unused property injection, avoiding JDK Bean introspection soft caches after actual job execution. No reflection into server internals or cache-wide clearing was added.
+
+`clean check shadowJar` passed all 23 tests on Java25. Real old5 reproduced the exact line134 NPE under controlled snapshot/quit ordering. Local Shiroha/Mizuki26.2-DEV-28fe077, PlugManX3.1.0-Beta.2 and isolated MySQL tests passed with two clients in separate Folia regions: old5-to-new6 manual replacement, three Quests-only transitions, three config reloads, quit/rejoin, paired unload/manual load, menus and persisted completion/progress/count. Normal stop/cold restart passed. A new6-only JVM using default soft-cache policy collected both retired plugin instance and loader after real job execution and unload. Migration-era legacy5 soft-cache reclamation was tested separately with SoftRefLRUPolicyMSPerMB=0; this flag is not required for deployment. Local Mythic5.13.1-SNAPSHOT-6458f70e differs from the original supplied snapshot. No Linux or large-player stress claim.
+
+No configuration/schema/reward changes. Main remains loaded for a Quests-only update: unload AuroraQuests, replace its JAR (one copy), then load AuroraQuests-2.5.0-6. Existing config/data stays. Tests/probes are separate from the plugin JAR. Evidence: audit/aurora-midnight-20261101; delivery: 交付/AuroraQuests-midnight-fix-20261101.
+
+Build with an explicit maintained Main13 JAR:
+
+```sh
+./gradlew --offline --no-daemon clean check shadowJar -PauroraJar=/path/to/Aurora-2.6.0-13.jar
+```
+
 # Block tracker compatibility: 2.5.0-1
 
 Based on upstream `0946f759d4b4785bd80ae4fc2c65da05bf33f0ac` (2.5.0).

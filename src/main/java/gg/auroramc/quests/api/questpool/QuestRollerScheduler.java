@@ -17,7 +17,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -122,17 +121,21 @@ public class QuestRollerScheduler {
     public static class QuestRollJob implements Job {
         @Override
         public void execute(JobExecutionContext context) {
-            var pool = AuroraQuests.getInstance().getPoolManager().getPool(context.getJobDetail().getJobDataMap().getString("poolId"));
+            var plugin = AuroraQuests.getInstance();
+            if (plugin.isStopping()) return;
+            var poolId = context.getJobDetail().getJobDataMap().getString("poolId");
+            var pool = plugin.getPoolManager().getPool(poolId);
+            if (pool == null) return;
             AuroraQuests.logger().debug("Executing quest reroll job for pool " + pool.getId());
 
-            Bukkit.getAsyncScheduler().runDelayed(AuroraQuests.getInstance(), (task) -> {
+            Bukkit.getAsyncScheduler().runDelayed(plugin, (task) -> {
+                if (plugin.isStopping() || plugin.getPoolManager().getPool(poolId) != pool) return;
                 pool.getQuestRoller().resetNextExecutionTime();
-                var players = new ArrayList<>(AuroraQuests.getInstance().getProfileManager().getProfiles());
-
-                for (var player : players) {
-                    var questPool = player.getQuestPool(pool.getId());
-                    questPool.reRollQuests(true);
-                }
+                plugin.getProfileManager().forEachProfile(profile -> {
+                    if (plugin.getPoolManager().getPool(poolId) != pool) return;
+                    var questPool = profile.getQuestPool(poolId);
+                    if (questPool != null) questPool.reRollQuests(true);
+                });
             }, 100, TimeUnit.MILLISECONDS);
         }
     }

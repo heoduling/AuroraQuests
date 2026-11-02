@@ -17,7 +17,7 @@ public class PoolManager {
     @Getter
     private final RewardAutoCorrector rewardAutoCorrector = new RewardAutoCorrector();
 
-    private final Map<String, Pool> registry = new HashMap<>();
+    private volatile Map<String, Pool> registry = Map.of();
 
     public PoolManager() {
         rewardFactory.registerRewardType(NamespacedId.fromDefault("command"), CommandReward.class);
@@ -25,7 +25,10 @@ public class PoolManager {
         rewardFactory.registerRewardType(NamespacedId.fromDefault("item"), ItemReward.class);
 
         try {
-            StdSchedulerFactory.getDefaultScheduler().start();
+            var scheduler = StdSchedulerFactory.getDefaultScheduler();
+            // Jobs read their context directly; setter injection only creates Bean cache entries.
+            scheduler.setJobFactory(new org.quartz.simpl.SimpleJobFactory());
+            scheduler.start();
         } catch (SchedulerException e) {
             AuroraQuests.logger().severe("Failed to start scheduler: " + e.getMessage());
         }
@@ -35,10 +38,12 @@ public class PoolManager {
         for (Pool pool : registry.values()) {
             pool.dispose();
         }
-        registry.clear();
-
+        var replacement = new HashMap<String, Pool>();
         for (Pool pool : pools) {
-            registry.put(pool.getId(), pool);
+            replacement.put(pool.getId(), pool);
+        }
+        registry = Map.copyOf(replacement);
+        for (Pool pool : pools) {
             pool.start();
         }
         Bukkit.getPluginManager().callEvent(new QuestsLoadedEvent());

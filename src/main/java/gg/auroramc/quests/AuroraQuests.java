@@ -193,7 +193,7 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
         poolManager.reload(pools);
 
         reloadUnlockTask();
-        profileManager.getProfiles().forEach(p -> p.reload(true));
+        profileManager.forEachProfile(p -> p.reload(true));
     }
 
     @Override
@@ -293,6 +293,10 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
 
     private void reloadUnlockTask() {
         if (stopping) return;
+        if (unlockTask != null) {
+            unlockTask.cancel();
+            unlockTask = null;
+        }
         var cf = configManager.getConfig().getUnlockTask();
 
         if (!cf.getEnabled()) {
@@ -305,7 +309,7 @@ public class AuroraQuests extends AuroraQuestsPlugin implements Listener {
 
         unlockTask = Bukkit.getAsyncScheduler().runAtFixedRate(this, (task) -> {
             if (stopping) return;
-            profileManager.getProfiles().forEach(profile -> {
+            profileManager.forEachProfile(profile -> {
                 for (var pool : profile.getQuestPools()) {
                     pool.unlock(false);
                     pool.rollIfNecessary(true);

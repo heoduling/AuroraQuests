@@ -126,6 +126,8 @@ dependencies {
 
     testImplementation("io.papermc.paper:paper-api:26.2.build.31-alpha")
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.0")
+    testImplementation("org.quartz-scheduler:quartz:2.3.2")
+    testRuntimeOnly("com.cronutils:cron-utils:9.2.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.0")
 
     compileOnly("org.projectlombok:lombok:1.18.46")
